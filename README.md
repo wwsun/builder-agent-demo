@@ -4,18 +4,44 @@ A simple builder agent demo using Tauri and Gemini API.
 
 ![alt text](image.png)
 
-## Run and deploy your AI Studio app
-
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/8bacfed9-87c0-477b-913a-209ca0c3292a
-
 ## Run Locally
 
-**Prerequisites:** Node.js
+**Prerequisites:**
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+- [Node.js](https://nodejs.org/) (v18+)
+- [Rust](https://www.rust-lang.org/tools/install) (The `cargo` package manager)
+- macOS/Windows/Linux native build dependencies (Xcode Command Line Tools on macOS)
+
+### 1. Install Node Dependencies
+
+```bash
+npm install
+```
+
+### 2. Configure Environment
+
+Create a `.env` file in the root directory and add your Gemini API Key:
+
+```bash
+GEMINI_API_KEY="your-gemini-api-key-here"
+```
+
+### 3. Run Development Server
+
+To run the application in development mode (spins up both Vite and the Tauri desktop window):
+
+```bash
+npm run tauri:dev
+```
+
+_Note: The first time you run this command, it will take a few minutes to download and compile the Rust backend dependencies._
+
+### 4. Build for Production
+
+To build a standalone desktop application (e.g., a `.dmg` or `.app` on macOS):
+
+```bash
+npm run tauri:build
+```
+
+The compiled binaries will be available in the `src-tauri/target/release/bundle/` directory.
