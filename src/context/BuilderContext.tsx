@@ -1,11 +1,6 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { GoogleGenAI } from "@google/genai";
+import { invoke } from '@tauri-apps/api/core';
 import { RoleType, Message } from '@/types';
-
-// Initialize Gemini AI
-// Note: In a real production app, you might want to move this to a backend proxy 
-// to protect your API key, but for this demo/preview environment it's acceptable.
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 const SYSTEM_INSTRUCTIONS: Record<RoleType, string> = {
   developer: `你是一位精通 HTML、Tailwind CSS 的前端开发专家。
@@ -36,9 +31,9 @@ const SYSTEM_INSTRUCTIONS: Record<RoleType, string> = {
    - 使用黑白灰（grayscale）色调。
    - 使用边框（border）、背景色块来表示区域。
    - 使用 "X" 或占位符图标表示图片。
-   - 字体使用等宽字体或系统默认字体，体现“设计稿”的草图感。
+   - 字体使用等宽字体或系统默认字体，体现"设计稿"的草图感。
    - 可以在元素旁添加简单的标注（如红色文字说明）。
-4. 直接返回完整的 HTML 代码，用 \`\`\`html 包裹。`
+4. 直接返回完整的 HTML 代码，用 \`\`\`html 包裹。`,
 };
 
 interface BuilderContextType {
@@ -55,7 +50,9 @@ interface BuilderContextType {
 
 const BuilderContext = createContext<BuilderContextType | undefined>(undefined);
 
-export const BuilderProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const BuilderProvider: React.FC<{ children: ReactNode }> = ({
+  children,
+}) => {
   const [role, setRole] = useState<RoleType>('developer'); // Default to developer/campaign operator
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -73,58 +70,46 @@ export const BuilderProvider: React.FC<{ children: ReactNode }> = ({ children })
 
   const generateResponse = async (userInput: string) => {
     setIsTyping(true);
-    
-    try {
-      const modelId = role === 'developer' ? "gemini-3.1-pro-preview" : "gemini-3-flash-preview";
-      
-      // Construct the prompt with history context (simplified for this demo)
-      // In a full app, you'd send the chat history.
-      const prompt = userInput;
 
-      const response = await ai.models.generateContent({
-        model: modelId,
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: prompt }]
-          }
-        ],
-        config: {
-          systemInstruction: SYSTEM_INSTRUCTIONS[role],
-        }
+    try {
+      // Call Rust backend via Tauri invoke
+      const responseText = await invoke<string>('generate_content', {
+        role,
+        prompt: userInput,
+        systemInstruction: SYSTEM_INSTRUCTIONS[role],
       });
 
-      const responseText = response.text || "抱歉，我暂时无法生成内容，请稍后再试。";
-      
+      const finalText =
+        responseText || '抱歉，我暂时无法生成内容，请稍后再试。';
+
       // Extract content for preview based on role
       let newPreviewContent = '';
-      
+
       if (role === 'developer' || role === 'designer') {
         // Extract code block (html or jsx)
-        const codeMatch = responseText.match(/```(?:html|xml|tsx|jsx|typescript|javascript)?\s*([\s\S]*?)\s*```/);
+        const codeMatch = finalText.match(
+          /```(?:html|xml|tsx|jsx|typescript|javascript)?\s*([\s\S]*?)\s*```/,
+        );
         if (codeMatch && codeMatch[1]) {
           newPreviewContent = codeMatch[1];
         } else {
-            // Fallback: if no code block, maybe the whole text is code if it starts with <
-            if (responseText.trim().startsWith('<')) {
-                newPreviewContent = responseText;
-            }
+          // Fallback: if no code block, maybe the whole text is code if it starts with <
+          if (finalText.trim().startsWith('<')) {
+            newPreviewContent = finalText;
+          }
         }
       } else if (role === 'product') {
         // For PRD and Design, the whole response (or a large part) is the content
-        // We might want to separate the "chatty" part from the "document" part, 
-        // but for now, let's assume the AI follows instructions to output the document.
-        newPreviewContent = responseText;
+        newPreviewContent = finalText;
       }
 
-      addMessage(responseText, 'agent');
+      addMessage(finalText, 'agent');
       if (newPreviewContent) {
         setPreviewContent(newPreviewContent);
       }
-
     } catch (error) {
-      console.error("Gemini API Error:", error);
-      addMessage("抱歉，生成过程中遇到了问题，请检查网络或稍后重试。", 'agent');
+      console.error('Tauri Command Error:', error);
+      addMessage(`抱歉，生成过程中遇到了问题：${error}`, 'agent');
     } finally {
       setIsTyping(false);
     }
@@ -137,17 +122,19 @@ export const BuilderProvider: React.FC<{ children: ReactNode }> = ({ children })
   };
 
   return (
-    <BuilderContext.Provider value={{
-      role,
-      setRole,
-      messages,
-      addMessage,
-      isTyping,
-      previewContent,
-      setPreviewContent,
-      generateResponse,
-      resetSession
-    }}>
+    <BuilderContext.Provider
+      value={{
+        role,
+        setRole,
+        messages,
+        addMessage,
+        isTyping,
+        previewContent,
+        setPreviewContent,
+        generateResponse,
+        resetSession,
+      }}
+    >
       {children}
     </BuilderContext.Provider>
   );
